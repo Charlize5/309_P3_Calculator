@@ -155,5 +155,139 @@ std::printf("  at %zu buckets, longest chain: %zu, weak longest chain: %d\n",
 CHECK(r.max_probe_length() <= 1000 / buckets); //check the bound
 CHECK(weak_longest > 64); //check bound
 }
+//requred one workspace per path :( am sad
+//literally the same test core with slightly different syntax 
+TEST(ws_rejects_parent_escape) {
+    TempDir d; //create a temporary directory for the workspace
+    Workspace ws(d.path());
+    fs::path out;
+    std::string reason; 
+    REQUIRE(ws.resolve("notes/todo.txt", &out, &reason));   
+    CHECK(out == ws.root() / "notes" / "todo.txt");
+    CHECK(!ws.resolve("../etc/passwd", &out, &reason)); //check that the path is rejected
+    CHECK(!reason.empty()); 
+}
+ //clion autofill is so much better
+TEST(ws_accepts_plain_relative) {
+    TempDir d;
+    Workspace ws(d.path()); //
+    fs::path out;
+    std::string reason;
+    REQUIRE(ws.resolve("notes/todo.txt", &out, &reason));
+    CHECK(out == ws.root() / "notes" / "todo.txt"); // 
+}
+ 
+TEST(ws_normalizes_dot_and_double_slash) {
+    TempDir d;
+    Workspace ws(d.path());
+    fs::path out;
+    std::string reason;
+    REQUIRE(ws.resolve("./notes//todo.txt", &out, &reason));
+    CHECK(out == ws.root() / "notes" / "todo.txt"); //path was normailized? check spec syntax, im not confident in it...
+}
+ 
+TEST(ws_dot_is_root) {
+    TempDir d;
+    Workspace ws(d.path());
+    fs::path out;
+    std::string reason;
+    REQUIRE(ws.resolve(".", &out, &reason)); //check that the path is resolved to the root
+    CHECK(out == ws.root());
+}
+ 
+TEST(ws_dotdot_that_stays_inside) {
+    TempDir d;
+    Workspace ws(d.path());
+    fs::path out;
+    std::string reason;
+    REQUIRE(ws.resolve("a/../b", &out, &reason));
+    CHECK(out == ws.root() / "b");
+    REQUIRE(ws.resolve("a/..", &out, &reason)); //requires that the path is in boucnds /../
+    CHECK(out == ws.root());
+}
+ 
+TEST(ws_accepts_nonexistent_target) {
+    TempDir d;
+    Workspace ws(d.path());
+    fs::path out;
+    std::string reason;
+    REQUIRE(ws.resolve("new/dir/file.txt", &out, &reason)); //resolve a path to a non-existent file
+    CHECK(out == ws.root() / "new" / "dir" / "file.txt");
+    CHECK(!fs::exists(ws.root() / "new"));              // resolve must not touch the files, you cant be creepin around in there
+}
+ 
+TEST(ws_double_dot_inside_a_name_is_fine_lol) {
+    TempDir d;
+    Workspace ws(d.path());
+    fs::path out;
+    std::string reason;
+    REQUIRE(ws.resolve("my..notes.txt", &out, &reason));
+    CHECK(out == ws.root() / "my..notes.txt"); //niche but checks for .. 
+}
+ 
+TEST(ws_rejects_empty) { //yes, i know empty was supposed to be the first test, but i wanted to do the other ones first
+    TempDir d; 
+    Workspace ws(d.path());
+    fs::path out;
+    std::string reason;
+    CHECK(!ws.resolve("", &out, &reason));
+    CHECK(!reason.empty());
+}
+ 
+TEST(ws_rejects_nul_byte) { //nul char = evil
+    TempDir d;
+    Workspace ws(d.path());
+    fs::path out;
+    std::string reason;
+    const std::string with_nul = std::string("notes") + '\0' + "/x";   // nuh uh
+    CHECK(with_nul.size() == 8);
+    CHECK(!ws.resolve(with_nul, &out, &reason));
+    CHECK(!reason.empty()); 
+}
+ 
+TEST(ws_rejects_absolute) {
+    TempDir d; /
+    Workspace ws(d.path());
+    fs::path out;
+    std::string reason;
+    CHECK(!ws.resolve("/etc/passwd", &out, &reason));
+    CHECK(!reason.empty());
+    reason.clear();
+    // absolute paths not allowed even if they point inside the wokrspae 
+    CHECK(!ws.resolve((ws.root() / "todo.txt").string(), &out, &reason));
+    CHECK(!reason.empty());
+}
+ 
+TEST(ws_rejects_bare_dotdot) {
+    TempDir d; 
+    Workspace ws(d.path());
+    fs::path out;
+    std::string reason;
+    CHECK(!ws.resolve("..", &out, &reason)); //..
+    CHECK(!reason.empty());
+}
+ 
+TEST(ws_rejects_climb_out) {
+    TempDir d;
+    Workspace ws(d.path());
+    fs::path out;
+    std::string reason;
+    CHECK(!ws.resolve("../etc/passwd", &out, &reason));
+    CHECK(!reason.empty());
+    reason.clear();
+    CHECK(!ws.resolve("a/../../b", &out, &reason)); //climb out of bounds, stop creepin around in my directories
+    CHECK(!reason.empty());
+}
+ 
+TEST(ws_rejects_climb_out_and_back_in) { 
+    TempDir d;
+    Workspace ws(d.path());
+    fs::path out;
+    std::string reason;
+    const std::string sneaky = "notes/../../" + ws.root().filename().string() + "/notes/todo.txt";
+    CHECK(!ws.resolve(sneaky, &out, &reason)); //I cought you, sneaky.
+    CHECK(!reason.empty());
+}
+ 
 
 int main(int argc, char** argv) { return mt::run_all(argc, argv); }
