@@ -85,6 +85,7 @@ TEST(calc_division_by_zero) {
     std::string err;
     CHECK(!eval("1 / 0", &v, &err));
     CHECK(err == "division by zero");
+    CHECK(!eval("1 / (2 - 2)", &v, &err)); //ADDED
 }
 
 // ------------------------------------------------------------- your tests
@@ -102,7 +103,7 @@ TEST(reg_10000_tools){
 ToolRegistry r; //default
 Tool* first_ptr = nullptr; //check the first tool added
 for (int i = 0; i < 10000; ++i) {//debug, this is supposed to be 10000 not 1000
-    
+
     auto t = std::make_unique<NamedTool>(tool_name(i)); //autofill, check namespace
     if (i == 0) first_ptr = t.get(); //remember the first tool added
     REQUIRE(r.add(std::move(t)));
@@ -311,5 +312,44 @@ TEST(ws_rejects_climb_out_and_back_in) {
     CHECK(!reason.empty());
 }
  
+//6. **Calculator:** every row of the table in §4.6, plus at least two expressions of your own. Use the `eval` helper in the starter's test file, which runs the provided `calc_tokenize` and then your `calc_evaluate`.
+//MY CALC TESTS using the eval function at the top
+//my divide by zero was added above
+TEST(calc_PEMDAS){
+    double n = 0;
+    std::string err;
+    REQUIRE(eval("(2 + 3) * 4", &n, &err));
+    CHECK(n == 20);
+    REQUIRE(eval("2 * (3 + 4) - 5", &n, &err));
+    CHECK(n == 9);
+}
+TEST(calc_left_to_right){
+    double n = 0;
+    std::string err; //wrong
+    REQUIRE(eval("10 - 4 - 3", &n, &err)); 
+    CHECK(n == 3); //make sure n != 9
+    REQUIRE(eval("100 / 10 / 5", &n, &err));
+    CHECK(n == 2);
+}
+
+TEST(calc_doubles){
+    double n = 0;
+    std::string err;
+    REQUIRE(eval("7 / 2", &n, &err));
+    CHECK(n == 3.5);
+    REQUIRE(eval("3 / 2", &n, &err));
+    CHECK(n == 1.5); //ADDED
+    REQUIRE(eval("0.25 + 0.25", &n, &err));
+    CHECK(n == 0.5); //added
+}
+
+TEST(calc_negative){
+    double n = 0;
+    std::string err;
+    REQUIRE(eval("-3 * -3", &n, &err));
+    CHECK(n == 9);
+}
+
+
 
 int main(int argc, char** argv) { return mt::run_all(argc, argv); }
