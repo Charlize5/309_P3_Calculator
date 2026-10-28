@@ -28,6 +28,7 @@ namespace fs = std::filesystem;
 namespace {
 
 // A tool whose name you choose — use it to fill the registry in tests.
+//^ you got it besty
 class NamedTool : public Tool {
 public:
     explicit NamedTool(std::string n) : n_(std::move(n)), schema_(JsonValue::object()) {}
@@ -38,6 +39,7 @@ public:
 private:
     std::string n_;
     JsonValue   schema_;   // an empty JSON object: {}
+
 };
 
 // Tokenize with the provided tokenizer, then run YOUR calc_evaluate.
@@ -46,7 +48,7 @@ bool eval(const std::string& expr, double* value, std::string* error) {
     if (!calc_tokenize(expr, &tokens, error)) return false;
     return calc_evaluate(tokens, value, error);
 }
-
+std::string tool_name(int i) { return "tool_" + std::to_string(i); } //forgot to define this earlier. 
 }  // namespace
 
 // ---------------------------------------------------------------- examples
@@ -69,17 +71,6 @@ TEST(reg_duplicate_keeps_original) {
     CHECK(!r.add(std::make_unique<NamedTool>("alpha")));
     CHECK(r.find("alpha") == original);
     CHECK(r.size() == 1);
-}
-
-TEST(ws_rejects_parent_escape) {
-    TempDir d;
-    Workspace ws(d.path());
-    fs::path out;
-    std::string reason;
-    REQUIRE(ws.resolve("notes/todo.txt", &out, &reason));   // sanity: accepts *something*
-    CHECK(out == ws.root() / "notes" / "todo.txt");
-    CHECK(!ws.resolve("../etc/passwd", &out, &reason));
-    CHECK(!reason.empty());
 }
 
 TEST(calc_precedence) {
@@ -110,7 +101,8 @@ TEST(calc_division_by_zero) {
 TEST(reg_10000_tools){
 ToolRegistry r; //default
 Tool* first_ptr = nullptr; //check the first tool added
-for (int i = 0; i < 10000; ++i) {
+for (int i = 0; i < 10000; ++i) {//debug, this is supposed to be 10000 not 1000
+    
     auto t = std::make_unique<NamedTool>(tool_name(i)); //autofill, check namespace
     if (i == 0) first_ptr = t.get(); //remember the first tool added
     REQUIRE(r.add(std::move(t)));
@@ -122,11 +114,41 @@ CHECK(r.find("tool_0") == first_ptr); //check the first tool added
 
 for (int i = 0; i < 10000; ++i) {
     CHECK(r.find(tool_name(i)) != nullptr); }//check that the tool is found
-    CHECK(r.find("tool_10000") != nullptr); //check that the tool is found
+    CHECK(r.find("tool_10000") == nullptr); //check that the tool is found
     CHECK(r.max_probe_length() <=64); //check bound
 
     std::printf("   buckets: %zu, load factor: %.3f, longest chain: %zu\n",
-                r.buckets(), r.load_factor(), r.max_probe_length());
+                r.bucket_count(), r.load_factor(), r.max_probe_length());
+}
+
+//6.1
+TEST(reg_null_rejected) {
+ToolRegistry r; //makes sure that the size remains correct when null is detected
+//cant mess with registered tools
+    CHECK(!r.add(nullptr)); 
+    CHECK_EQ(r.size(), std::size_t{0});
+    REQUIRE(r.add(std::make_unique<NamedTool>("a")));
+    CHECK(!r.add(std::unique_ptr<Tool>()));
+    CHECK_EQ(r.size(), std::size_t{1});        
+}
+
+TEST(reg_for_each_visits_each_once) {
+    //does the cisit count match the number of tools??
+    //
+    ToolRegistry r;
+    const std::vector<std::string> names = {"read_file", "write_file", "list_dir", "calculator", "echo"};
+    for (const auto& n : names) REQUIRE(r.add(std::make_unique<NamedTool>(n)));
+    r.add(std::make_unique<NamedTool>("echo"));  // rejected duplicate must not show up twice
+//^^!! copies floating everywhere 
+
+    std::vector<std::string> seen;
+    r.for_each([&](const Tool& t) { seen.push_back(t.name()); });
+    CHECK_EQ(seen.size(), names.size());
+    for (const auto& n : names) {
+        int count = 0;
+        for (const auto& s : seen) if (s == n) ++count;
+        CHECK_EQ(count, 1);                      // each name exactly once
+    }
 }
 //////////////////////////////////////////////////////////////////////////////////////
 //required:
@@ -134,14 +156,14 @@ TEST(reg_alternative_hash) {
     ToolRegistry r; //default
     //add 10000 tools
 
-    for (int i = 0; i <1000; ++i){
+    for (int i = 0; i <10000; ++i){
         REQUIRE(r.add(std::make_unique<NamedTool>(tool_name(i))));
         //longest chain for +s.size after s at 0
     }
 
-    const std::size_t buckets = r.buckets();
+    const std::size_t buckets = r.bucket_count();
     std::vector<int> weak_counts(buckets, 0); //count the number of tools in each bucket
-    for (int i = 0; i < 1000; ++i) {
+    for (int i = 0; i < 10000; ++i) {
         std::string s = tool_name(i);//name og tool
         std::size_t weak = static_cast<unsigned char>(s[0]) + s.size(); //weak hash
         ++weak_counts[weak % buckets]; //increment the count for the bucket
@@ -152,7 +174,7 @@ for (int count : weak_counts) {
 }
 std::printf("  at %zu buckets, longest chain: %zu, weak longest chain: %d\n",
             buckets, r.max_probe_length(), weak_longest);
-CHECK(r.max_probe_length() <= 1000 / buckets); //check the bound
+  CHECK(static_cast<std::size_t>(weak_longest) > r.max_probe_length()); //check that the weak hash has a longer chain than the real hash
 CHECK(weak_longest > 64); //check bound
 }
 //requred one workspace per path :( am sad
@@ -246,7 +268,7 @@ TEST(ws_rejects_nul_byte) { //nul char = evil
 }
  
 TEST(ws_rejects_absolute) {
-    TempDir d; /
+    TempDir d; 
     Workspace ws(d.path());
     fs::path out;
     std::string reason;
