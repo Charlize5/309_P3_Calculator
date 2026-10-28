@@ -18,6 +18,7 @@
 #include <cstddef>
 #include <functional>
 #include <memory>
+#include <string> //allowed 
 #include <string_view>
 #include <vector>
 
@@ -70,4 +71,27 @@ private:
     // Your buckets, your element count, and any private helpers you want
     // (for example a rehash function). Store std::unique_ptr<Tool> in the
     // buckets so that pointers handed out by find() survive a resize.
+
+    //find() and rehash() shouldnt call the Tool, so it they cant mess with key
+
+    struct Entry {
+        std::string name; //^never have to call this which returns a string val
+        std::unique_ptr<Tool> tool;
+    };
+
+    static constexpr std::size_t kInitialBucketCount = 8; //betwwn the 1 > 64
+    //the bucket total has to be a power of 2 
+    // The buckets are a vector of vectors of Entry objects. Each bucket is a vector of Entry objects, which allows for separate chaining.
+    static constexpr double kMaxLoadFactor = 0.75; //max load factor, given in CPP comments 
+
+    static std::size_t index_for(std::string_view key, std::size_t bucket_total) noexcept;
+        //these allocate bucket count amount to each item in a new bucket (doenst move tool objects)
+      //helper function for rehash
+
+    void rehash(std::size_t new_bucket_count);
+
+    std::vector<std::vector<Entry>> buckets_; //vector of vectors of Entry objects
+    //remains for the full lifestime, and shall not be empty
+
+    std::size_t size_ = 0; //number of tools
 };

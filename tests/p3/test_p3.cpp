@@ -9,6 +9,8 @@
 // One area:      ./build/test_p3 reg_        (names starting with "reg_")
 // One test:      ./build/test_p3 =reg_add_and_find
 
+//all includes fair game
+
 #include "../mini_test.h"
 #include "../test_helpers.h"     // TempDir, write_text, args1, ...
 
@@ -102,6 +104,56 @@ TEST(calc_division_by_zero) {
 //                                 max_probe_length, check the bound
 //   reg_alternative_hash          REQUIRED: longest chain of a weak hash
 //   ws_<case>                     REQUIRED: every row of the table in spec §4.4
-//   calc_<case>                   left-to-right, parentheses, negatives
+//   calc_<case>                   left-to-right, parentheses, negative
+//
+//required
+TEST(reg_10000_tools){
+ToolRegistry r; //default
+Tool* first_ptr = nullptr; //check the first tool added
+for (int i = 0; i < 10000; ++i) {
+    auto t = std::make_unique<NamedTool>(tool_name(i)); //autofill, check namespace
+    if (i == 0) first_ptr = t.get(); //remember the first tool added
+    REQUIRE(r.add(std::move(t)));
+    CHECK(r.load_factor() <= 1.0); //check the load factor
+ 
+}
+CHECK_EQ(r.size(), std::size_t(10000)); //check the size
+CHECK(r.find("tool_0") == first_ptr); //check the first tool added
+
+for (int i = 0; i < 10000; ++i) {
+    CHECK(r.find(tool_name(i)) != nullptr); }//check that the tool is found
+    CHECK(r.find("tool_10000") != nullptr); //check that the tool is found
+    CHECK(r.max_probe_length() <=64); //check bound
+
+    std::printf("   buckets: %zu, load factor: %.3f, longest chain: %zu\n",
+                r.buckets(), r.load_factor(), r.max_probe_length());
+}
+//////////////////////////////////////////////////////////////////////////////////////
+//required:
+TEST(reg_alternative_hash) {
+    ToolRegistry r; //default
+    //add 10000 tools
+
+    for (int i = 0; i <1000; ++i){
+        REQUIRE(r.add(std::make_unique<NamedTool>(tool_name(i))));
+        //longest chain for +s.size after s at 0
+    }
+
+    const std::size_t buckets = r.buckets();
+    std::vector<int> weak_counts(buckets, 0); //count the number of tools in each bucket
+    for (int i = 0; i < 1000; ++i) {
+        std::string s = tool_name(i);//name og tool
+        std::size_t weak = static_cast<unsigned char>(s[0]) + s.size(); //weak hash
+        ++weak_counts[weak % buckets]; //increment the count for the bucket
+}
+int weak_longest = 0; //find the longest chain for the weak hash
+for (int count : weak_counts) {
+    if (count > weak_longest) weak_longest = count;
+}
+std::printf("  at %zu buckets, longest chain: %zu, weak longest chain: %d\n",
+            buckets, r.max_probe_length(), weak_longest);
+CHECK(r.max_probe_length() <= 1000 / buckets); //check the bound
+CHECK(weak_longest > 64); //check bound
+}
 
 int main(int argc, char** argv) { return mt::run_all(argc, argv); }
